@@ -37,6 +37,11 @@ Window {
     property real firstClickY: -1            // 记录首次点击的Y
     property bool hasFirstClick: false       // 是否已完成第一次点击
 
+    // 编辑模式属性
+    property bool isEditing: false           // 是否处于编辑/微调模式
+    property int handleSize: 10              // 拖拽手柄大小
+    property int handleBorder: 2             // 手柄边框宽度
+
     flags: Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint // 无边框+置顶
 
     Component.onCompleted: {
@@ -86,7 +91,7 @@ Window {
         anchors.fill: parent
         color: darkLayerColor
         // 遮罩，拖拽时扣除框选区域
-        layer.enabled: mouseStatus==1
+        layer.enabled: mouseStatus==1 || mouseStatus==2
         layer.effect: OpacityMask {
             invert: true // 取反
             maskSource: Item {
@@ -103,7 +108,7 @@ Window {
     }
     // 框选区边框
     Rectangle {
-        visible: mouseStatus==1
+        visible: mouseStatus==1 || mouseStatus==2
         x: clipX
         y: clipY
         width: clipW
@@ -115,10 +120,7 @@ Window {
     // 十字指示器， mouseStatus==0 时启用
     Item {
         anchors.fill: parent
-        visible: mouseArea.containsMouse && (
-                (selectionMode === "drag" && mouseStatus === 0) ||
-                (selectionMode === "click" && mouseStatus === 0)
-             )
+        visible: mouseArea.containsMouse && mouseStatus === 0
         Rectangle { // 水平
             anchors.left: parent.left
             anchors.right: parent.right
@@ -232,17 +234,24 @@ Window {
         }
         // 松开
         onReleased: {
-            // addnew
             if (win.selectionMode === "click") {
                 // 点击模式，首次单击后不立即结束
                 return
             }
             if (mouse.button === Qt.RightButton) {
+                if (mouseStatus == 2) {
+                    // 编辑模式下右键取消
+                    mouseStatus = 0
+                    isEditing = false
+                }
                 ssEnd(false)
                 return
             }
             if(mouseStatus == 1) {
-                ssEnd(true)
+                // 绘制完成，进入编辑模式（不立即结束）
+                mouseStatus = 2
+                isEditing = true
+                // 不调用 ssEnd(true)，等待用户确认
             }
         }
         // adnew
@@ -270,6 +279,267 @@ Window {
                 // 右键取消截图
                 win.hasFirstClick = false
                 ssEnd(false)
+            }
+        }
+
+        // 键盘事件处理
+        Keys.onPressed: {
+            if (mouseStatus == 2) {  // 编辑模式
+                if (event.key === Qt.Key_Return || event.key === Qt.Key_Enter) {
+                    ssEnd(true)
+                    event.accepted = true
+                } else if (event.key === Qt.Key_Escape) {
+                    mouseStatus = 0
+                    isEditing = false
+                    ssEnd(false)
+                    event.accepted = true
+                }
+            }
+        }
+    }
+
+    // ========== 编辑模式拖拽手柄 ==========
+
+    // 左上角手柄
+    Rectangle {
+        id: handleTopLeft
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX - width/2
+        y: clipY - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeFDiagCursor
+            onPositionChanged: {
+                var newX = Math.max(0, Math.min(mouse.x + handleTopLeft.x, clipX + clipW - 20))
+                var newY = Math.max(0, Math.min(mouse.y + handleTopLeft.y, clipY + clipH - 20))
+                clipW = clipW + (clipX - newX)
+                clipH = clipH + (clipY - newY)
+                clipX = newX
+                clipY = newY
+            }
+        }
+    }
+
+    // 右上角手柄
+    Rectangle {
+        id: handleTopRight
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX + clipW - width/2
+        y: clipY - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeBDiagCursor
+            onPositionChanged: {
+                var newW = Math.max(20, mouse.x + handleTopRight.x - clipX)
+                var newY = Math.max(0, Math.min(mouse.y + handleTopRight.y, clipY + clipH - 20))
+                clipH = clipH + (clipY - newY)
+                clipY = newY
+                clipW = newW
+            }
+        }
+    }
+
+    // 左下角手柄
+    Rectangle {
+        id: handleBottomLeft
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX - width/2
+        y: clipY + clipH - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeBDiagCursor
+            onPositionChanged: {
+                var newX = Math.max(0, Math.min(mouse.x + handleBottomLeft.x, clipX + clipW - 20))
+                var newH = Math.max(20, mouse.y + handleBottomLeft.y - clipY)
+                clipW = clipW + (clipX - newX)
+                clipX = newX
+                clipH = newH
+            }
+        }
+    }
+
+    // 右下角手柄
+    Rectangle {
+        id: handleBottomRight
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX + clipW - width/2
+        y: clipY + clipH - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeFDiagCursor
+            onPositionChanged: {
+                clipW = Math.max(20, mouse.x + handleBottomRight.x - clipX)
+                clipH = Math.max(20, mouse.y + handleBottomRight.y - clipY)
+            }
+        }
+    }
+
+    // 上边中点手柄
+    Rectangle {
+        id: handleTop
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX + clipW/2 - width/2
+        y: clipY - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeVerCursor
+            onPositionChanged: {
+                var newY = Math.max(0, Math.min(mouse.y + handleTop.y, clipY + clipH - 20))
+                clipH = clipH + (clipY - newY)
+                clipY = newY
+            }
+        }
+    }
+
+    // 下边中点手柄
+    Rectangle {
+        id: handleBottom
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX + clipW/2 - width/2
+        y: clipY + clipH - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeVerCursor
+            onPositionChanged: {
+                clipH = Math.max(20, mouse.y + handleBottom.y - clipY)
+            }
+        }
+    }
+
+    // 左边中点手柄
+    Rectangle {
+        id: handleLeft
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX - width/2
+        y: clipY + clipH/2 - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeHorCursor
+            onPositionChanged: {
+                var newX = Math.max(0, Math.min(mouse.x + handleLeft.x, clipX + clipW - 20))
+                clipW = clipW + (clipX - newX)
+                clipX = newX
+            }
+        }
+    }
+
+    // 右边中点手柄
+    Rectangle {
+        id: handleRight
+        width: handleSize; height: handleSize
+        color: "white"
+        border.color: "#00f91a"
+        border.width: handleBorder
+        visible: isEditing
+        x: clipX + clipW - width/2
+        y: clipY + clipH/2 - height/2
+        z: 10
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeHorCursor
+            onPositionChanged: {
+                clipW = Math.max(20, mouse.x + handleRight.x - clipX)
+            }
+        }
+    }
+
+    // 选区内部区域（支持双击确认和拖拽移动）
+    Rectangle {
+        id: selectionArea
+        x: clipX; y: clipY
+        width: clipW; height: clipH
+        color: "#00000000"  // 透明
+        visible: isEditing
+        z: 5
+
+        MouseArea {
+            anchors.fill: parent
+            cursorShape: Qt.SizeAllCursor
+            acceptedButtons: Qt.LeftButton | Qt.RightButton
+            // 双击确认
+            onDoubleClicked: {
+                if (mouse.button === Qt.LeftButton && mouseStatus == 2) {
+                    ssEnd(true)
+                }
+            }
+            // 拖拽移动选区
+            property int startX: 0
+            property int startY: 0
+            onPressed: {
+                startX = mouse.x
+                startY = mouse.y
+            }
+            onPositionChanged: {
+                var dx = mouse.x - startX
+                var dy = mouse.y - startY
+                var newX = Math.max(0, Math.min(clipX + dx, win.width - clipW))
+                var newY = Math.max(0, Math.min(clipY + dy, win.height - clipH))
+                clipX = newX
+                clipY = newY
+            }
+        }
+    }
+
+    // 编辑模式提示文字
+    Rectangle {
+        id: hintText
+        visible: isEditing
+        color: "#CC000000"
+        radius: 5
+        width: hintTextColumn.width + 16
+        height: hintTextColumn.height + 12
+        x: Math.max(0, Math.min(clipX, win.width - width))
+        y: clipY + clipH + 10 > win.height - height ? clipY - height - 10 : clipY + clipH + 10
+        z: 20
+
+        Column {
+            id: hintTextColumn
+            anchors.centerIn: parent
+            spacing: 2
+            Text {
+                text: "双击或按 Enter 确认"
+                color: "white"
+                font.pixelSize: 14
+            }
+            Text {
+                text: "右键或按 Esc 取消"
+                color: "#AAAAAA"
+                font.pixelSize: 12
             }
         }
     }
