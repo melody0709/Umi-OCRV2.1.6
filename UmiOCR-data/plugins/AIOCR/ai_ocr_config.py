@@ -523,6 +523,12 @@ localOptions = {
         "toolTip": tr("选择OCR结果的输出格式。坐标信息可用于定位文字位置。"),
     },
     
+    "markdown_output": {
+        "title": tr("Markdown 输出"),
+        "default": False,
+        "toolTip": tr("启用后，所有 AI 接口都返回 markdown 格式，保留原文排版结构。"),
+    },
+    
     "image_quality": {
         "title": tr("图像质量"),
         "default": "auto",

@@ -1941,14 +1941,20 @@ class Api:
             # 根据识别策略选择流程（不再需要启用开关）
             if hasattr(self, 'local_config'):
                 strategy = self.local_config.get('dual_strategy', 'ai_high_precision_with_coordinates')
+                markdown_output = self.local_config.get('markdown_output', False)
+                
+                # 如果启用了 markdown 输出，直接使用 AI 识别（跳过 Paddle 纠错流程）
+                if markdown_output:
+                    processed_base64 = self._preprocess_image(imageBase64)
+                    return self._run_ocr(processed_base64, self.local_config)
+                
                 # 含位置版：Paddle检测框 + AI纠错文本
                 if strategy in ('ai_high_precision_with_coordinates', 'paddle_first_correction'):
                     return self._run_paddle_first_correction(imageBase64)
                 # 纯文本：整图AI识别（预处理后）
                 elif strategy == 'ai_high_precision_text_only':
-                    local = getattr(self, 'local_config', {})
                     processed_base64 = self._preprocess_image(imageBase64)
-                    return self._run_ocr(processed_base64, {"output_format": "text_only", "language": local.get("language", "auto")})
+                    return self._run_ocr(processed_base64, self.local_config)
                 # 兜底：未知或旧值（如 'ai_first'）均按含位置版处理
                 else:
                     return self._run_paddle_first_correction(imageBase64)
@@ -2047,6 +2053,7 @@ class Api:
         """构建提示词"""
         language = config.get("language", "auto")
         output_format = config.get("output_format", "text_only")
+        markdown_output = config.get("markdown_output", False)
         
         # 语言映射
         lang_map = {
@@ -2068,8 +2075,17 @@ class Api:
             prompt = f"""识别图片文字并返回坐标，语言：{lang_instruction}
 输出JSON格式：{{"texts": [{{"text": "文字内容", "box": [[x1,y1],[x2,y2],[x3,y3],[x4,y4]]}}]}}
 坐标为像素位置，左上角为原点。直接返回JSON，无其他内容。"""
+        elif markdown_output:
+            prompt = f"""请将图片中的所有内容（文本、表格、公式）完整地识别出来，语言：{lang_instruction}，并以 Markdown 格式返回。
+
+请严格遵守以下规则：
+1.  **表格：** 如果图片中包含表格，请必须使用 Markdown 表格语法将其格式化。
+2.  **公式：** 如果图片中包含数学公式，请必须使用 LaTeX 格式将其包裹 (行内公式使用 $...$，块级公式使用 $$...$$)。
+3.  **结构：** 保持合理的段落、标题和列表结构。
+4.  **纯净：** 直接返回 Markdown 结果，不要包含任何解释性文字（如 "这是结果：" 或 "好的："），也不要使用 "```markdown" 代码块标记包裹整个结果。"""
         else:
             prompt = f"""识别图片中的文字，语言：{lang_instruction}。保持原有格式，直接返回文字内容。"""
+        
         if language in ("auto", "zh"):
             prompt += "\n严格禁止对中文进行繁体/简体转换、全角/半角转换、字符归一化；混合繁简时保持混合状态。逐字抄写图像字符，不要重写。示例：不要把 '台灣里体干' 改为 '臺灣裏體幹'，也不要相反。"
         
@@ -2202,7 +2218,7 @@ class Api:
         if output_format == "with_coordinates":
             return self._parse_text_with_coordinates(content)
         else:
-            return self._parse_text_only(content)
+            return self._parse_text_only(content, config)
 
     def _extract_json_from_text(self, content):
         """从混杂文本中尽力提取JSON块（支持代码块与原始文本）"""
@@ -2451,7 +2467,7 @@ class Api:
         
         return result_data
     
-    def _parse_text_only(self, content):
+    def _parse_text_only(self, content, config=None):
         """解析纯文本"""
         # 确保content是字符串，但要正确处理不同类型
         if isinstance(content, list):
@@ -2480,13 +2496,21 @@ class Api:
         if not content:
             return self._create_empty_result()
         
-        # 👇【新增代码】：如果是输出 Markdown 排版的模型，将其作为一个整体框返回，保留所有缩进和换行！
-        provider_name = self.global_config.get("a_provider", self.global_config.get("provider", ""))
-        if provider_name in ["paddle_vl", "paddle_vl_15", "pp_structure_v3"]:
+        # 检查是否启用 markdown 输出（全局配置或局部配置）
+        markdown_output = False
+        if config:
+            markdown_output = config.get("markdown_output", False)
+        if not markdown_output:
+            # 兼容旧逻辑：paddle_vl 系列默认返回 markdown
+            provider_name = self.global_config.get("a_provider", self.global_config.get("provider", ""))
+            if provider_name in ["paddle_vl", "paddle_vl_15", "pp_structure_v3"]:
+                markdown_output = True
+        
+        # 如果启用 markdown 输出，将其作为一个整体框返回，保留所有缩进和换行
+        if markdown_output:
             img_width, img_height = self.original_size if getattr(self, "original_size", None) else (800, 600)
             single_box = [[0, 0], [img_width, 0], [img_width, img_height], [0, img_height]]
             return {"code": 100, "data": [{"text": content, "box": single_box, "score": 1.0}]}
-        # 👆【新增结束】
         
         # 其他传统模型：继续按行分割文本
         lines = [line.strip() for line in content.split('\n') if line.strip()]
