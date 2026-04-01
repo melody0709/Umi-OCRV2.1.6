@@ -514,7 +514,7 @@ localOptions = {
     
     "dual_strategy": {
         "title": tr("识别策略"),
-        "default": "ai_high_precision_with_coordinates",
+        "default": "ai_high_precision_text_only",
         "optionsList": [
             ["ai_high_precision_with_coordinates", tr("双通道：AI高精度识别（含位置版）")],
             ["ai_high_precision_text_only", tr("仅AI高精度识别")],
@@ -552,13 +552,13 @@ localOptions = {
     
     "markdown_output": {
         "title": tr("Markdown 输出"),
-        "default": False,
+        "default": True,
         "toolTip": tr("启用后，所有 AI 接口都返回 markdown 格式，保留原文排版结构。"),
     },
 
     "markdown_inline_images": {
         "title": tr("Markdown 图片内嵌"),
-        "default": True,
+        "default": False,
         "toolTip": tr("启用后，将 markdown 图片改写为 base64 data URI，便于 VSCode 预览显示；关闭后，改写为本地 file:/// 链接，更适合 Obsidian 等本地 Markdown 工具。"),
     },
     

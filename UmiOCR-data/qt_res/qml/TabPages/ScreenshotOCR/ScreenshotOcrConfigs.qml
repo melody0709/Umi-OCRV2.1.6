@@ -75,7 +75,7 @@ Configs {
 
             "copy": {
                 "title": qsTr("复制结果"),
-                "default": false,
+                "default": true,
             },
             "popMainWindow": {
                 "title": qsTr("弹出主窗口"),

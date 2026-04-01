@@ -24,6 +24,7 @@ Item {
         },
         "api": {
             "title": qsTr("当前接口"),
+            "default": "win7_x64_PaddleOCR-json_PP-OCRv5",
             "optionsList": [],
         },
     }

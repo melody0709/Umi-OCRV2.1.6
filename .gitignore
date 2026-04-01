@@ -31,6 +31,7 @@ UmiOCR-data/lib
 UmiOCR-data/plugins/win7_x64_TesseractOCR_best/
 UmiOCR-data/plugins/win7_x64_Pix2Text/
 UmiOCR-data/plugins/win7_x64_PaddleOCR-json/
+UmiOCR-data/plugins/win7_x64_PaddleOCR-json_PP-OCRv5/
 UmiOCR-data/temp
 UmiOCR-data/temp_doc
 # 允许运行环境压缩包
